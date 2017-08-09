@@ -5,6 +5,8 @@ OVERLAP_DEF=0.6
 DELTA_DEF=0.03
 TIME_DEF=10000
 SAMPLES_DEF=10000
+
+# default output file names
 MAT_FILE="matrix.txt"
 LOG_FILE="log.txt"
 ALIGNED_READING_PCD="aligned-reading.pcd"
@@ -13,6 +15,11 @@ REF_ERROR_PCD_PT="ref-error-ptToPt.pcd"
 REF_ERROR_PLY_PT=${REF_ERROR_PCD_PT%.pcd}.ply
 REF_ERROR_PCD_PLANE="ref-error-ptToPlane.pcd"
 REF_ERROR_PLY_PLANE=${REF_ERROR_PCD_PLANE%.pcd}.ply
+
+# default params
+needDateFolder=false
+verbose=false
+
 
 # Functions for preparing args ---------------
 printUsage() {
@@ -56,7 +63,7 @@ printTxtFileFormat() {
 createDateFolder() {
 	folderName=`date +'%m-%d-%y'`
 	if [[ ! -d $outputRoot/$folderName ]]; then
-		if [[ $verbose ]]; then
+		if [[ "$verbose" == "true" ]]; then
 			echo "Creating folder with today's date in output root directory" $outputRoot/$folderName
 		fi
 		mkdir $outputRoot/$folderName
@@ -69,7 +76,7 @@ setRoots() {
 	# Default for input root directory: Set to S4P_INPUT_ROOT
 	if [[ -z $inputRoot ]]; then
 		if [[ ! -z $S4P_INPUT_ROOT ]]; then
-			if [[ $verbose ]]; then
+			if [[ "$verbose" == "true" ]]; then
 				echo "Setting input root filepath to" $S4P_INPUT_ROOT
 			fi
 			inputRoot=$S4P_INPUT_ROOT
@@ -81,7 +88,7 @@ setRoots() {
 
 	# Default for output root directory: Set to S4P_OUTPUT_ROOT
 	if [[ -z $outputRoot ]] && [[ ! -z $S4P_OUTPUT_ROOT ]]; then
-		if [[ $verbose ]]; then
+		if [[ "$verbose" == "true" ]]; then
 			echo "Setting output root filepath to" $S4P_OUTPUT_ROOT
 		fi
 		outputRoot=$S4P_OUTPUT_ROOT
@@ -100,13 +107,13 @@ setRoots() {
 
 	# Make directories for user inputted input and output roots if they don't exist
 	if [[ ! -d $inputRoot ]]; then
-		if [[ $verbose ]]; then
+		if [[ "$verbose" == "true" ]]; then
 			echo "Creating input root directory" $inputRoot
 		fi
 		mkdir -p $inputRoot
 	fi
 	if [[ ! -d $outputRoot ]]; then
-		if [[ $verbose ]]; then
+		if [[ "$verbose" == "true" ]]; then
 			echo "Creating output root directory" $outputRoot
 		fi
 		mkdir -p $outputRoot
@@ -117,7 +124,7 @@ setScriptsPath() {
 	# Default for scripts path: Set to REG_SCRIPTS_PATH
 	if [[ -z $scriptsPath ]]; then
 		if [[ ! -z $REG_SCRIPTS_PATH ]]; then
-			if [[ $verbose ]]; then
+			if [[ "$verbose" == "true" ]]; then
 				echo "Setting scripts filepath to" $REG_SCRIPTS_PATH
 			fi
 			scriptsPath=$REG_SCRIPTS_PATH
@@ -184,11 +191,13 @@ setFilepaths() {
 
 # Set default Super4PCS options if necessary
 setS4Popts() {
-	if [[ -z $overlapOpt ]]; then
-		overlapOpt=$OVERLAP_DEF
+	if [[ -z $deltaOpt ]]; then
 		deltaOpt=$DELTA_DEF
 		timeOpt=$TIME_DEF
 		samplesOpt=$SAMPLES_DEF
+		if [[ -z $overlapOpt ]]; then
+			overlapOpt=$OVERLAP_DEF
+		fi
 		return
 	fi
 
@@ -220,7 +229,7 @@ runS4P() {
 		# record command used in log file
 		echo "Running: $ time -p Super4PCS -i $ref $reading -o $overlapOpt -d $deltaOpt -t $timeOpt -n $samplesOpt -m $output/$MAT_FILE" >> $output/$LOG_FILE
 
-		if [[ $verbose ]]; then
+		if [[ "$verbose" ]]; then
 			echo "Running: $ time -p Super4PCS -i $ref $reading -o $overlapOpt -d $deltaOpt -t $timeOpt -n $samplesOpt -m $output/$MAT_FILE"
 		fi
 
@@ -237,7 +246,7 @@ alignReading() {
 	# Convert reading point cloud from ply to pcd if necessary
 	readingPCD=${reading%.ply}.pcd
 	if [[ ! -e $readingPCD ]]; then
-		if [[ $verbose ]]; then
+		if [[ "$verbose" ]]; then
 			echo "Converting" $reading "to" $readingPCD "for alignment"
 		fi
 		$scriptsPath/./pcl_convert.sh $reading $readingPCD -f
@@ -251,22 +260,22 @@ alignReading() {
 	transformMat=${transformMat//$'\n'/,} # convert newlines to commas
 	transformMat=${transformMat// /} # strip trailing spaces from beginning of line 
 
-	if [[ $verbose ]]; then
+	if [[ "$verbose" ]]; then
 		echo "Transforming reading point cloud with Super4PCS alignment" $transformMat
 	fi
 	pcl_transform_point_cloud $readingPCD $output/$ALIGNED_READING_PCD -matrix $transformMat
 	# Convert aligned reading point cloud from pcd to ply
-	if [[ $verbose ]]; then
+	if [[ "$verbose" ]]; then
 		echo "Converting aligned reading point cloud" $output/$ALIGNED_READING_PCD "to" $output/$ALIGNED_READING_PLY
 	fi
 	$scriptsPath/./pcl_convert.sh $output/$ALIGNED_READING_PCD $output/$ALIGNED_READING_PLY -f
 
 	# -- Get error --
-	if [[ $verbose ]]; then
+	if [[ "$verbose" ]]; then
 		echo "Getting point-to-point error and saving in" $output/$LOG_FILE
 	fi
 	$scriptsPath/./get_pcl_error.sh $ref $output/$ALIGNED_READING_PCD -l $output/$LOG_FILE -o $output/$REF_ERROR_PLY_PT -c nn -s $scriptsPath
-	if [[ $verbose ]]; then
+	if [[ "$verbose" ]]; then
 		echo "Getting point-to-plane error and saving in" $output/$LOG_FILE
 	fi
 	$scriptsPath/./get_pcl_error.sh $ref $output/$ALIGNED_READING_PCD -l $output/$LOG_FILE -o $output/$REF_ERROR_PLY_PLANE -c nnplane -s $scriptsPath
@@ -285,27 +294,32 @@ runTxtFile() {
 
 # What actually gets run in the script ----------------------------
 # --Preparing arguments--
+# Check if need to print the input text file format
+if [[ $1 == "-h" ]]; then
+	printTxtFileFormat
+fi
+
 # Fill in txt file name
 checkTxtFile $1
 shift # shift to be able to use getopts with the rest of the flags
 
 # Fill in flags
-while getopts 'h:i:o:s:dv' flag; do
+while getopts 'i:o:s:dvh' flag; do
 	case "${flag}" in
-		h) printTxtFileFormat;;
 		i) inputRoot=${OPTARG};;
 		o) outputRoot=${OPTARG};;
 		s) scriptsPath=${OPTARG};;
 		d) needDateFolder=true;;
 		v) verbose=true;;
+		h) printTxtFileFormat;;
 	esac
 done
 
-# Set default root paths as necessary
+# Process params and fill in defaults as necessary
 setRoots
 setScriptsPath
 
-if [[ needDateFolder ]]; then
+if [[ "$needDateFolder" == "true" ]]; then
 	createDateFolder
 fi
 
