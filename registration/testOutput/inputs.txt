@@ -1,6 +1,0 @@
-hippo1.vtk hippo2.vtk vtk 0.6 0.04 1000 2100
-hippo1.vtk hippo2.vtk vtk 0.7 - 1100 2200
-hippo1.vtk hippo2.vtk vtk 0.8 - 1200
-hippo1.vtk hippo2.vtk vtk
-hippo1.pcd hippo2.pcd pcd
-hippo1.ply hippo2.ply ply

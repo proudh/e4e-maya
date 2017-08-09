@@ -19,11 +19,12 @@ REF_ERROR_PLY_PLANE=${REF_ERROR_PCD_PLANE%.pcd}.ply
 # default params
 needDateFolder=false
 verbose=false
+keepOutput=false
 
 
 # Functions for preparing args ---------------
 printUsage() {
-	echo "USAGE: $0 <input txt file> [-i input root filepath] [-o output root filepath] [-s = scripts filepath] [-d = create root folder with today's date] [-v = verbose]" 1>&2
+	echo "USAGE: $0 <input txt file> [-i input root filepath] [-o output root filepath] [-s = scripts filepath] [-d = create root folder with today's date] [-v = verbose] [-k = keep output]" 1>&2
 	echo "where options are:"
 	echo "<input txt file>: .txt file specifying each Super4PCS registration run."
 	echo "  Run $0 -h for more details on how to format this file."
@@ -38,6 +39,10 @@ printUsage() {
 	echo "  (default: do not create folder)"
 	echo "[-v]: verbose mode. Prints info during runtime"
 	echo "  (default: not verbose)"
+	echo "[-k]: keep outputted point clouds from registration and computing error, i.e. aligned reading models"
+	echo "  and reference models with error intensity colors, in pcd and ply. Note that this might take up a lot"
+	echo "  of memory if your models are huge!"
+	echo "  (default: don't keep)"
 	exit -1
 }
 
@@ -229,11 +234,11 @@ runS4P() {
 		# record command used in log file
 		echo "Running: $ time -p Super4PCS -i $ref $reading -o $overlapOpt -d $deltaOpt -t $timeOpt -n $samplesOpt -m $output/$MAT_FILE" >> $output/$LOG_FILE
 
-		if [[ "$verbose" ]]; then
+		if [[ "$verbose" == "true" ]]; then
 			echo "Running: $ time -p Super4PCS -i $ref $reading -o $overlapOpt -d $deltaOpt -t $timeOpt -n $samplesOpt -m $output/$MAT_FILE"
 		fi
 
-		time -p Super4PCS -i $ref $reading -o $overlapOpt -d $deltaOpt -t $timeOpt -n $samplesOpt -m $output/$MAT_FILE 2>&1 | tee -a $output/$LOG_FILE
+		(time -p Super4PCS -i $ref $reading -o $overlapOpt -d $deltaOpt -t $timeOpt -n $samplesOpt -m $output/$MAT_FILE) 2>&1 | tee -a $output/$LOG_FILE
 	else
 		echo "Skipping this run." 1>&2
 	fi
@@ -246,7 +251,7 @@ alignReading() {
 	# Convert reading point cloud from ply to pcd if necessary
 	readingPCD=${reading%.ply}.pcd
 	if [[ ! -e $readingPCD ]]; then
-		if [[ "$verbose" ]]; then
+		if [[ "$verbose" == "true" ]]; then
 			echo "Converting" $reading "to" $readingPCD "for alignment"
 		fi
 		$scriptsPath/./pcl_convert.sh $reading $readingPCD -f
@@ -260,25 +265,38 @@ alignReading() {
 	transformMat=${transformMat//$'\n'/,} # convert newlines to commas
 	transformMat=${transformMat// /} # strip trailing spaces from beginning of line 
 
-	if [[ "$verbose" ]]; then
+	if [[ "$verbose" == "true" ]]; then
 		echo "Transforming reading point cloud with Super4PCS alignment" $transformMat
 	fi
 	pcl_transform_point_cloud $readingPCD $output/$ALIGNED_READING_PCD -matrix $transformMat
 	# Convert aligned reading point cloud from pcd to ply
-	if [[ "$verbose" ]]; then
+	if [[ "$verbose" == "true" ]]; then
 		echo "Converting aligned reading point cloud" $output/$ALIGNED_READING_PCD "to" $output/$ALIGNED_READING_PLY
 	fi
 	$scriptsPath/./pcl_convert.sh $output/$ALIGNED_READING_PCD $output/$ALIGNED_READING_PLY -f
 
 	# -- Get error --
-	if [[ "$verbose" ]]; then
+	if [[ "$verbose" == "true" ]]; then
 		echo "Getting point-to-point error and saving in" $output/$LOG_FILE
 	fi
 	$scriptsPath/./get_pcl_error.sh $ref $output/$ALIGNED_READING_PCD -l $output/$LOG_FILE -o $output/$REF_ERROR_PLY_PT -c nn -s $scriptsPath
-	if [[ "$verbose" ]]; then
+	if [[ "$verbose" == "true" ]]; then
 		echo "Getting point-to-plane error and saving in" $output/$LOG_FILE
 	fi
 	$scriptsPath/./get_pcl_error.sh $ref $output/$ALIGNED_READING_PCD -l $output/$LOG_FILE -o $output/$REF_ERROR_PLY_PLANE -c nnplane -s $scriptsPath
+}
+
+# if not keeping outputted point clouds, remove them after each S4P run.
+removeOutputPointClouds() {
+	if [[ "$verbose" == "true" ]]; then
+		echo "Removing outputted point clouds."
+	fi
+	rm $output/$ALIGNED_READING_PCD
+	rm $output/$ALIGNED_READING_PLY
+	rm $output/$REF_ERROR_PCD_PT
+	rm $output/$REF_ERROR_PCD_PLANE
+	rm $output/$REF_ERROR_PLY_PT
+	rm $output/$REF_ERROR_PLY_PLANE
 }
 
 # Go through the input text file and run the arguments in each line through Super4PCS.
@@ -287,6 +305,9 @@ runTxtFile() {
 		runS4P $line
 		if [[ $? == 0 ]]; then
 			alignReading
+			if [[ "$keepOutput" != "true" ]]; then
+				removeOutputPointClouds
+			fi
 		fi
 	done < $1
 }
@@ -304,7 +325,7 @@ checkTxtFile $1
 shift # shift to be able to use getopts with the rest of the flags
 
 # Fill in flags
-while getopts 'i:o:s:dvh' flag; do
+while getopts 'i:o:s:dvhk' flag; do
 	case "${flag}" in
 		i) inputRoot=${OPTARG};;
 		o) outputRoot=${OPTARG};;
@@ -312,6 +333,7 @@ while getopts 'i:o:s:dvh' flag; do
 		d) needDateFolder=true;;
 		v) verbose=true;;
 		h) printTxtFileFormat;;
+		k) keepOutput=true;;
 	esac
 done
 
