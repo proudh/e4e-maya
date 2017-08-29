@@ -23,17 +23,35 @@ The systems that we are using currently give us point clouds (set of 3d points),
 
 In previous years we have used a FARO LIDAR to get point clouds of Maya temples.  This generates a `.ptx` file which may be converted to other point cloud formats with FARO software.  Since these scans tend to give very dense point clouds, it's easier to work with them after downsampling (which is possible with Vidware).
 
-### SfM
+### Structure from Motion (SfM)
 
-We are using Agisoft for SfM.
+SfM takes in a set of still 2d images of a 3d object at different angles, and outputs a 3d computer reconstruction of that object.  This works by finding common features across these images, and based on how they appear in each image, calculating where the features are in 3d space to convert it to a 3d point. 
 
-### Google Tango
+In past years we have tried to focus on optimizing SfM so that ideally it can run in real-time so that on the field, researchers can see if they've collected enough data.  We tried to parallelize the Bundle Adjustment step of an SfM toy library (at https://github.com/royshil/SfM-Toy-Library ) and tried to port it to a GPU using ArrayFire, but we only worked on the pre-processing step to the OpenCV call to Bundle Adjustment. 
+
+More recently, we have been using the commercial software Agisoft for SfM.  You can access Agisoft from the desktop in the SEALab.  SfM still has the drawback of not getting us real-time results, but it can generate meshes, overlay texture from photos onto 3d models, and is faster and cheaper than using LIDAR.
+
+### Google Tango/Simultaneous Localization and Mapping (SLAM)
+
+Instead of trying to optimize SfM, we've also tried using Simultaneous Localization and Mapping (SLAM) to generate a 3d computer model.
+
+SLAM is traditionally used for robot exploration.  A robot running SLAM in an unknown environment will generate a map of its surroundings using sensor data such as RGB images, depth maps, and location (position, heading, etc), and use this map to go around.  As the robot moves, it updates its own map, and uses that map to navigate.
+
+SLAM is helpful because the map, which can be a 3d computer model, is generated in real-time.  But the results might not be that accurate, and it's easy for SLAM to lose track of where it is, i.e. if the camera recording moves too fast or is bumpy.
 
 ### Cameras
 
 #### Intel Realsense
 
+We have worked with the Intel Realsense R200, SR300, and ZR300 cameras.  These cameras work in RGBD (red, green, blue, and depth) and are lightweight and portable.  Also, the ZR300 has a built-in IMU. However, the video quality of these cameras is not as good as the Microsoft Kinect cameras.  Recently, we tested the SR300 and ZR300 cameras in Guatemala; the data looks noisier than that recorded by the Kinects.
+
+There are corresponding Realsense ROS launch files for the various SLAM algorithms we are testing (i.e. to run RTAB-MAP with the Realsense, use `~/workspace/maya_archaeology/rtabmap/rtabmap_realsense.launch`).  Be sure to toggle the SR300 parameter as necessary.
+
 #### Microsoft Kinect
+
+We also are working with the Microsoft Kinect v1 and v2 cameras.  These do not have built in IMUs and are bulkier than the Intel Realsense cameras, but they have better video quality.
+
+There are separate Kinect ROS launch files for the Kinect v1 and v2 (i.e. `~/workspace/maya_archaeology/rtabmap/rtabmap_kinectv1.launch` and `~/workspace/maya_archaeology/rtabmap/rtabmap_kinectv2.launch`). Kinect v1 is handled with freenect_stack and Kinect v2 is handled with libfreenect2.
 
 ### Portability (Ghostbusters backpack)
 
@@ -91,13 +109,18 @@ Each line in the input .txt file is formatted like so:
 ```
   where `<referenceFilepath>` is the location of the .ply reference/source point cloud
     relative to the input root filepath,
+    
   `<readingFilepath>` is the location of the .ply reading/target point cloud
     relative to the input root filepath,
+    
   `[outputFilepath]` is the directory where the log file and aligned reading point cloud
     will be stored relative to the output root filepath,
     (default: `outputRootFilepath/<currentTime>`)
+    
   and the rest are Super4PCS options.
+  
   (default: overlap = 0.6, delta = 0.03, time = 10000, samples = 10000)
+  
 To omit an optional option and use defaults, enter `-`.
 
 And run the Docker image with your desired parameters. For example:
