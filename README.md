@@ -1,19 +1,30 @@
 # Maya Archaeology
 ## Overview
 Welcome to the Maya Archaeology project!  This is a project under UC San Diego's Engineers for Exploration research program.
+
 Our goal is to develop a portable and accessible system for archaeologists to document excavations quickly and accurately by generating 3D computer models of them.  Currently we are experimenting with using mobile remote sensing technologies and different reconstruction algorithms, and testing with archaeologists studying ancient Maya temples in Guatemala.
 
-## Background
-//how archaeology is like in Maya temples in Guatemala
+Refer to the [Engineers for Exploration website](http://e4e.ucsd.edu/maya-archaeology) for general info about the history of the project.
 
 ## Goals
-Ideally this system would be:
+Ideally our proposed system would be:
 1. Accurate
+ - The 3d models we generate will be used for documentation.  Currently we are testing the accuracy of our data collection methods (refer to Summer 2017 work).
+ 
 2. Portable
+ - It is costly and inconvenient to bring large and heavy equipment to the field sites, but portability especially becomes a must for the Maya temple expeditions. Since archaeologists must excavate these temples to access them, and the resulting tunnels in the temples can get small and narrow (sometimes requiring crawling to get through!).  The tunnels are not suitable for wheeled robots and can get too small for small aircrafts, so the easiest alternative so far are humans.
+
 3. Gets real-time results
+ - Expeditions to the field site are not easily accessible, i.e. once a year; this gives rise to the possibility that while scanning a part of a Maya temple, there is not enough data to complete the model for it (i.e. we missed capturing a certain angle of a mask).  Real-time results would alert us of this situation and be able to complete the model on-site, instead of finding out there is a hole in the model a couple months later while processing the data, and having to wait until next year to try again.
+
 4. Affordable
+ - We want to eventually hand over this system for archaeologists to use, so expensive equipment should not be a barrier.
+
 5. Simple to use
+ - Ideally, archaeologists would be able to use this system on their own without too much technical knowledge or expertise.  Thus in the end, our system should be easy to setup and should have a user-friendly interface.
+
 6. Quick
+ - To limit the cost of an expedition and for the archaeologists' convenience, data collection should be as quick as possible while maintaining accuracy.
 
 The systems that we are using currently give us point clouds (set of 3d points), but eventually we will want to generate meshes from these (connecting these 3d points with faces) so that they can be easily viewed and worked with (especially for 3d printing/VR).
 
@@ -297,9 +308,23 @@ Model Files will be located in
 
 NICP is a library for point cloud registration. We have Docker images for running some sample NICP programs such as the NICP viewer. However, due to time constraints it was easier to work with the other registration algorithms we set up already, so we ended up not using it.
 
-#### CloudCompare
 
-CloudCompare can open up point clouds for viewing and perform operations on them; what we've used are:
+### Other work
+
+#### Computing cloud error scripts
+
+PCL has a small binary `pcl_compute_cloud_error` that can compute the root mean square error (RMSE) between two point clouds, which allows us to quantify how "correct" a generated model is by summing up distances between the point clouds.  The RMSE can be calculated with point-to-point distances (finding the distance between point A in the SLAM model against the closest point B in the LIDAR model) or with point-to-plane distances (generating a plane tangent to the surface including point B and a few of its neighbors in the LIDAR model, and finding the distance between point A in the SLAM model to this plane).  We expect that the point-to-plane calculation is more accurate for our usage, because although the tunnels in Maya temples have bumpy, rocky walls, the walls are overall still generally flat; point-to-point calculations would be better for situations that don't have such room-like structure, such as comparing two spherical objects.
+
+Since `pcl_compute_cloud_error` can only work with `.pcd` files, for convenience, we have scripts that take in `.ply` and `.vtk` files, automatically convert them to `.pcd`, find the RMSE between two models, and converts the output to `.ply`, which can be opened in CloudCompare.
+
+#### Comparing SfM vs. LIDAR
+
+#### Literature review 
+
+### Viewing point clouds
+
+#### CloudCompare
+CloudCompare can open up point clouds for viewing, and is good for viewing many point clouds once.  It also can perform operations on them; what we've used are:
 - Translation/rotation for roughly aligning models together for comparison.
 - Inputting matrix transformation for scaling. For example, to scale a point cloud to be 5 times larger, input the matrix:
 5 0 0 0
@@ -308,24 +333,48 @@ CloudCompare can open up point clouds for viewing and perform operations on them
 1 0 0 0
 - Matrix transformations can also be used to quickly visualize the result of a registration algorithm. Copy and paste the transformation matrix outputted from registration onto the original model to see how well the registration algorithm did in moving it.
 - Segmentation (scissor tool in top menu) to cut out unnecessary or noisy parts of models.
+- Computing normals and curvature, which are fields used for finding the point-to-plane error using PCL.
+- Registration. Given two roughly aligned models, you can use CloudCompare's built-in ICP to register them.  The quality of this registration is worse than other stand-alone registration algorithms however.
 
-### Other work
-
-#### Computing cloud error scripts
-
-#### Comparing SfM vs. LIDAR
-
-#### Literature review
-
-### Viewing point clouds
-
-#### CloudCompare
+Note that CloudCompare doesn't work on a few laptops in the SEALab, i.e. Thinkpad and Dell.
 
 #### Meshlab
+Meshlab can also visualize point clouds, open multiple point clouds at once, and translate/rotate/scale point clouds.  It also has some nifty options for filtering which we haven't explored too deeply yet.  Meshlab is on all of the laptops in the SEALab that we've used (MSI, Dell, Thinkpad).
 
 #### Vidware
+Vid's viewer is the best at visualizing large, dense point clouds and being able to control the camera in order to "walk" through the point cloud tunnels.  It is accessible on the desktop in the SEALab.
 
 #### pcl_viewer
+PCL provides a simple viewer where you can look at the error intensities generated by calculating the error from `pcl_cloud_compute_error`.  Note that this only works with `.pcd` point cloud files.
+
+To run `pcl_viewer` on your reference model `error.pcd`:
+```
+$ pcl_viewer error.pcd
+```
+
+Press `l` to see all options for colorings in your open model.
+```
+List of available geometry handlers for actor error.pcd-0: xyz(1) 
+List of available color handlers for actor error.pcd-0: [random](1) x(2) y(3) z(4) intensity(5)
+```
+
+In this case, pressing `5` will show the error intensity of the model (how far apart the reading/SLAM model was from this reference/LIDAR model).
+
+Press `u` to show a lookup table that quantifies these colors.
+Note that toggling this on using the MSI laptop outputs this error:
+```
+ERROR: In /build/vtk6-dmAaMa/vtk6-6.2.0+dfsg1/Rendering/OpenGL/vtkOpenGLTexture.cxx, line 200
+vtkOpenGLTexture (0x203a780): No scalar values found for texture input!
+```
+However everything still looks fine and the viewer doesn't crash, so it's probably ok :)
+
+To open multiple models at the same time, i.e. `error.pcd` and `slam1.pcd`:
+```
+$pcl_viewer error.pcd slam1.pcd
+```
+
+Note that there are no options for translating/rotating/scaling models.
+
 
 ### Notes
 
