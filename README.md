@@ -39,6 +39,8 @@ SLAM is traditionally used for robot exploration.  A robot running SLAM in an un
 
 SLAM is helpful because the map, which can be a 3d computer model, is generated in real-time.  But the results might not be that accurate, and it's easy for SLAM to lose track of where it is, i.e. if the camera recording moves too fast or is bumpy.
 
+In past years we have run Kinfu as well as InfiniTAM on the Google Tango for scanning.  However for InfiniTAM, integrating motion estimation is not yet stable.
+
 ### Cameras
 
 #### Intel Realsense
@@ -51,9 +53,18 @@ There are corresponding Realsense ROS launch files for the various SLAM algorith
 
 We also are working with the Microsoft Kinect v1 and v2 cameras.  These do not have built in IMUs and are bulkier than the Intel Realsense cameras, but they have better video quality.
 
-There are separate Kinect ROS launch files for the Kinect v1 and v2 (i.e. `~/workspace/maya_archaeology/rtabmap/rtabmap_kinectv1.launch` and `~/workspace/maya_archaeology/rtabmap/rtabmap_kinectv2.launch`). Kinect v1 is handled with freenect_stack and Kinect v2 is handled with libfreenect2.
+There are separate Kinect ROS launch files for the Kinect v1 and v2 (i.e. `~/workspace/maya_archaeology/rtabmap/rtabmap_kinectv1.launch` and `~/workspace/maya_archaeology/rtabmap/rtabmap_kinectv2.launch`). Kinect v1 is handled with [freenect_stack](http://wiki.ros.org/freenect_stack) and Kinect v2 is handled with [libfreenect2](https://github.com/OpenKinect/libfreenect2).
 
-### Portability (Ghostbusters backpack)
+### Portability/lighting (Ghostbusters backpack)
+
+Students from Spring 2017 CSE 145/245 made a backpack setup to make it easier to bring and use our equipment in the field.  Prior to this,  scanning the tunnels of the Maya temple required holding a laptop in one hand and holding a Kinect camera in the other, which was cumbersome.  The backpack setup allowed us to run SLAM algorithms from a laptop in the backpack; a tablet was remotely connected to the laptop for the user to hold in order to access the laptop.  This tablet was attached to a rig that included an LED panel for lighting.
+
+Lighting for SLAM/SfM is important for the quality of the outputted model.  Hard shadows can be mistakened for features, and the range of the light limits how much the camera can pick up, so ideally we want our lighting to have as far of a range as possible, eliminating/softening as many shadows as possible, but still be low-powered and portable.
+
+A [quick Google search on rendering light](https://blender.stackexchange.com/questions/18697/lighting-without-highly-visible-shadows) suggests
+ - Large light source
+ - Multiple lights
+ - Environment lighting
 
 ### 3D Printing
 
@@ -169,9 +180,87 @@ Note that 4PCS is also built-in to Super4PCS and can be run using the flag `-x`.
 
 #### libpointmatcher
 
+Source: https://github.com/ethz-asl/libpointmatcher
+
+libpointmatcher runs regular ICP but has many [preprocessing filtering options](http://libpointmatcher.readthedocs.io/en/latest/Datafilters/).  Registration is quick compared to Super4PCS and Go-ICP.  Note that libpointmatcher works with .vtk files.
+
+To run libpointmatcher:
+Prepare your workspace:
+```
+mkdir libpointmatcher-ws
+cd libpointmatcher-ws
+```
+
+Grab the [Docker image](https://hub.docker.com/r/proudh/libpointmatcher-docker/) for libpointmatcher:
+```
+docker pull proudh/libpointmatcher-docker
+```
+
+Prepare a folder in the workspace for input models, and copy over the models needed.
+Make sure that the models are in `.vtk` format.  If not, then use PCL to convert your models, i.e. `pcl_pcd2vtk`.
+Note that `pcl_ply2vtk` might run into errors.  A workaround is to use `pcl_ply2pcd` then `pcl_pcd2vtk` instead, and/or make sure you're using the latest version of PCL (at the time of this writing it is PCL 1.8).
+```
+mkdir models
+cp lidar1.vtk models/.
+cp slam1.vtk models/.
+```
+
+Then make a config file with your desired data filters, and store this in your workspace.  Here are the contents of a config file `pointtoplane.yaml` we used, specifically setting the errorMinimizer to `PointToPlaneErrorMinimizer`:
+```
+readingDataPointsFilters:
+  - SamplingSurfaceNormalDataPointsFilter:
+      knn: 10
+      keepDensities: 1
+# We tried using the MaxDensityDataPointsFilter but it seemed to filter out too many points.
+#  - MaxDensityDataPointsFilter
+
+referenceDataPointsFilters:
+  - SurfaceNormalDataPointsFilter
+#  - MaxDensityDataPointsFilter
+
+matcher:
+  KDTreeMatcher:
+    knn: 1
+
+outlierFilters:
+  - TrimmedDistOutlierFilter:
+      ratio: 0.9
+
+errorMinimizer:
+  PointToPlaneErrorMinimizer
+
+transformationCheckers:
+  - CounterTransformationChecker:
+      maxIterationCount: 40
+  - DifferentialTransformationChecker:
+      minDiffRotErr: 0.001
+      minDiffTransErr: 0.01
+      smoothLength: 4
+
+inspector:
+  NullInspector
+# When uncommented, the following generates the point clouds step by step during the registration process.
+#  VTKFileInspector:
+#     baseFileName : vissteps
+#     dumpDataLinks : 1
+#     dumpReading : 1
+#     dumpReference : 1
+
+logger:
+  FileLogger
+```
+
+Then to run the Docker container:
+```
+docker run -v ~/libpointmatcher-ws/:/libpointmatcher-ws/ -w=/libpointmatcher-ws/ proudh/libpointmatcher-docker time -p /Libraries/libpointmatcher/build/examples/pmicp -v --config /libpointmatcher-ws/pointtoplane.yaml /libpointmatcher-ws/lidar1.vtk /libpointmatcher-ws/slam1.vtk 
+```
+
 #### Go-ICP
 
 Source: http://jlyang.org/go-icp/#code
+
+Note that Go-ICP takes in a text file as input.  We have a Docker image for running Go-ICP as well as a script that will convert your point clouds to the text file needed for Go-ICP.  To use Go-ICP:
+
 
 	install GoICP
 	install PCL
@@ -206,7 +295,19 @@ Model Files will be located in
 
 #### NICP
 
+NICP is a library for point cloud registration. We have Docker images for running some sample NICP programs such as the NICP viewer. However, due to time constraints it was easier to work with the other registration algorithms we set up already, so we ended up not using it.
+
 #### CloudCompare
+
+CloudCompare can open up point clouds for viewing and perform operations on them; what we've used are:
+- Translation/rotation for roughly aligning models together for comparison.
+- Inputting matrix transformation for scaling. For example, to scale a point cloud to be 5 times larger, input the matrix:
+5 0 0 0
+0 5 0 0
+0 0 5 0
+1 0 0 0
+- Matrix transformations can also be used to quickly visualize the result of a registration algorithm. Copy and paste the transformation matrix outputted from registration onto the original model to see how well the registration algorithm did in moving it.
+- Segmentation (scissor tool in top menu) to cut out unnecessary or noisy parts of models.
 
 ### Other work
 
