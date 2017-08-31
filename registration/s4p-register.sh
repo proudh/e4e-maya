@@ -24,7 +24,7 @@ keepOutput=false
 
 # Functions for preparing args ---------------
 printUsage() {
-	echo "USAGE: $0 <input txt file> [-i input root filepath] [-o output root filepath] [-s = scripts filepath] [-d = create root folder with today's date] [-v = verbose] [-k = keep output]" 1>&2
+	echo "USAGE: $0 <input txt file> [-i input root filepath] [-o output root filepath] [-s = scripts filepath] [-p = Super4PCS filepath] [-d = create root folder with today's date] [-v = verbose] [-k = keep output]" 1>&2
 	echo "where options are:"
 	echo "<input txt file>: .txt file specifying each Super4PCS registration run."
 	echo "  Run $0 -h for more details on how to format this file."
@@ -35,6 +35,8 @@ printUsage() {
 	echo "  (default: S4P_OUTPUT_ROOT)"
 	echo "[-s scripts filepath]: directory where get_pcl_error.sh and pcl_convert.sh are stored"
 	echo "  (default: REG_SCRIPTS_PATH)"
+	echo "[-p Super4PCS filepath]: directory where the Super4PCS binary is stored."
+	echo "  (default: S4P_PATH)"
 	echo "[-d]: create a folder in the output root filepath with today's date and store all output in this folder"
 	echo "  (default: do not create folder)"
 	echo "[-v]: verbose mode. Prints info during runtime"
@@ -139,9 +141,27 @@ setScriptsPath() {
 		fi
 	fi
 
+	# Default for Super4PCS path: Set to S4P_PATH
+	if [[ -z $s4pPath ]]; then
+		if [[ ! -z $S4P_PATH ]]; then
+			if [[ "$verbose" == "true" ]]; then
+				echo "Setting Super4PCS filepath to" $S4P_PATH
+			fi
+			s4pPath=$S4P_PATH
+		else
+			echo "No Super4PCS binary filepath. S4P_PATH not set." 1>&2
+			exit -1
+		fi
+	fi
+
 	# Remove ending / in scripts filepath if present
 	if [[ ${scriptsPath: -1 } == "/" ]]; then
 		scriptsPath=${scriptsPath%/}
+	fi
+
+	# Remove ending / in Super4PCS filepath if present
+	if [[ ${s4pPath: -1 } == "/" ]]; then
+		s4pPath=${s4pPath%/}
 	fi
 }
 
@@ -232,13 +252,13 @@ runS4P() {
 	# Run Super4PCS here
 	if [[ $retCode == 0 ]]; then
 		# record command used in log file
-		echo "Running: $ time -p Super4PCS -i $ref $reading -o $overlapOpt -d $deltaOpt -t $timeOpt -n $samplesOpt -m $output/$MAT_FILE" >> $output/$LOG_FILE
+		echo "Running: $ time -p $s4pPath/./Super4PCS -i $ref $reading -o $overlapOpt -d $deltaOpt -t $timeOpt -n $samplesOpt -m $output/$MAT_FILE" >> $output/$LOG_FILE
 
 		if [[ "$verbose" == "true" ]]; then
-			echo "Running: $ time -p Super4PCS -i $ref $reading -o $overlapOpt -d $deltaOpt -t $timeOpt -n $samplesOpt -m $output/$MAT_FILE"
+			echo "Running: $ time -p $s4pPath/./Super4PCS -i $ref $reading -o $overlapOpt -d $deltaOpt -t $timeOpt -n $samplesOpt -m $output/$MAT_FILE"
 		fi
 
-		(time -p Super4PCS -i $ref $reading -o $overlapOpt -d $deltaOpt -t $timeOpt -n $samplesOpt -m $output/$MAT_FILE) 2>&1 | tee -a $output/$LOG_FILE
+		(time -p $s4pPath/./Super4PCS -i $ref $reading -o $overlapOpt -d $deltaOpt -t $timeOpt -n $samplesOpt -m $output/$MAT_FILE) 2>&1 | tee -a $output/$LOG_FILE
 	else
 		echo "Skipping this run." 1>&2
 	fi
@@ -325,11 +345,12 @@ checkTxtFile $1
 shift # shift to be able to use getopts with the rest of the flags
 
 # Fill in flags
-while getopts 'i:o:s:dvhk' flag; do
+while getopts 'i:o:s:p:dvhk' flag; do
 	case "${flag}" in
 		i) inputRoot=${OPTARG};;
 		o) outputRoot=${OPTARG};;
 		s) scriptsPath=${OPTARG};;
+		p) s4pPath=${OPTARG};;
 		d) needDateFolder=true;;
 		v) verbose=true;;
 		h) printTxtFileFormat;;
