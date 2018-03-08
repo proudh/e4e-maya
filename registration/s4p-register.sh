@@ -299,11 +299,11 @@ alignReading() {
 	if [[ "$verbose" == "true" ]]; then
 		echo "Getting point-to-point error and saving in" $output/$LOG_FILE
 	fi
-	$scriptsPath/./get_pcl_error.sh $ref $output/$ALIGNED_READING_PCD -l $output/$LOG_FILE -o $output/$REF_ERROR_PLY_PT -c nn -s $scriptsPath
+	$scriptsPath/./get_pcl_error.sh $output/$ALIGNED_READING_PCD $ref -l $output/$LOG_FILE -o $output/$REF_ERROR_PLY_PT -c nn -s $scriptsPath
 	if [[ "$verbose" == "true" ]]; then
 		echo "Getting point-to-plane error and saving in" $output/$LOG_FILE
 	fi
-	$scriptsPath/./get_pcl_error.sh $ref $output/$ALIGNED_READING_PCD -l $output/$LOG_FILE -o $output/$REF_ERROR_PLY_PLANE -c nnplane -s $scriptsPath
+	$scriptsPath/./get_pcl_error.sh $output/$ALIGNED_READING_PCD $ref -l $output/$LOG_FILE -o $output/$REF_ERROR_PLY_PLANE -c nnplane -s $scriptsPath
 }
 
 # if not keeping outputted point clouds, remove them after each S4P run.
