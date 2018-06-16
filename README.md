@@ -1,5 +1,7 @@
 # Super4PCS scripts
 
+**WARNING: THIS IS NOT UP TO DATE. REFER TO THE [UCSD E4E REPO](https://github.com/UCSD-E4E/maya-archaeology) FOR THE MOST UP TO DATE VERSION. ALSO RUNNING WITH DOCKER IS BUGGY, SO RUN THE SCRIPTS LOCALLY.**
+
 Scripts to automate registering multiple point clouds through Super4PCS, and finding the error between registered point clouds using PCL.
 
 Super4PCS source: https://github.com/nmellado/Super4PCS
